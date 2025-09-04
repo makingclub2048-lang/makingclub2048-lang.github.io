@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>Fuzion</title>
+  <link rel="stylesheet" href="style.css" />
+
+</head>
+<body>
+<h1 class="brand">
+  <span class="logo">Fuzion</span>
+  <small class="tagline">Merge the primal elements. Shape a new world.</small>
+</h1>
+
+<div class="toolbar">
+  <div id="score">Score: 0</div>
+  <button id="toggle-destroy">💥 Cross-element collision: ON</button>
+  <button id="toggle-dex">📖 Codex</button>
+</div>
+
+<div id="game-container"></div>
+<p>Collide different elements and they 💥 disappear! (Toggleable.)</p>
+
+<div id="dex" style="display:none;">
+  <h2>📖 Discovered Elements</h2>
+  <div id="dex-list"></div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
