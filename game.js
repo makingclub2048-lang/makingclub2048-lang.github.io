@@ -463,45 +463,32 @@ function init() {
 init();
 
 const boardEl = document.getElementById('game-container');
-let startX=0, startY=0, isTouching=false;
+let startX=0, startY=0, dragging=false;
 
-boardEl.addEventListener('touchstart', (e) => {
-    const t = e.changedTouches[0];
-    startX = t.clientX; startY = t.clientY;
-    isTouching = true;
-}, {passive:true});
-
-boardEl.addEventListener('touchmove', (e) => {
-    // 게임 영역에서 스크롤 방지(수평/수직 스와이프 모두 사용한다면)
-    if (isTouching) e.preventDefault();
-}, {passive:false});
-
-boardEl.addEventListener('touchend', (e) => {
-    if (!isTouching) return;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - startX;
-    const dy = t.clientY - startY;
-    isTouching = false;
-
-    const absX = Math.abs(dx), absY = Math.abs(dy);
-    const threshold = 24; // 최소 스와이프 거리
-    if (absX < threshold && absY < threshold) return;
-
-    const dir = absX > absY ? (dx > 0 ? 'right' : 'left')
-        : (dy > 0 ? 'down' : 'up');
-    move(dir); // 기존 키보드 로직과 동일 함수 호출
+boardEl.addEventListener('pointerdown', (e) => {
+    dragging = true;
+    startX = e.clientX; startY = e.clientY;
+    boardEl.setPointerCapture(e.pointerId);
 });
 
+boardEl.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    // touch-action:none 덕분에 preventDefault 필요 없음
+});
 
+function endSwipe(e){
+    if (!dragging) return;
+    dragging = false;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    const ax = Math.abs(dx), ay = Math.abs(dy);
+    const threshold = 24;
+    if (ax < threshold && ay < threshold) return;
 
-// 롱프레스 툴팁 (간단 버전)
-let pressTimer;
-boardEl.addEventListener('touchstart', (e)=>{
-    const target = e.target.closest('.tile[data-title]');
-    if (!target) return;
-    pressTimer = setTimeout(()=> target.classList.add('show-tip'), 350);
-}, {passive:true});
-boardEl.addEventListener('touchend', ()=> { clearTimeout(pressTimer);
-    document.querySelectorAll('.tile.show-tip').forEach(el=>el.classList.remove('show-tip'));
-}, {passive:true});
+    const dir = ax > ay ? (dx > 0 ? 'right' : 'left')
+        : (dy > 0 ? 'down' : 'up');
+    move(dir); // 기존 이동 함수 호출
+}
 
+boardEl.addEventListener('pointerup', endSwipe);
+boardEl.addEventListener('pointercancel', ()=> dragging=false);

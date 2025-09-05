@@ -129,6 +129,8 @@ button:hover { background: #555; }
     padding: 5px;
     border-radius: 10px;
     overflow: visible; /* 혹시라도 잘리는 것 방지 */
+    touch-action: none;           /* 크롬/안드로이드: 터치 제스처(팬/줌) 금지 */
+    overscroll-behavior: contain; /* 경계 넘길 때 상위로 스크롤 전파 방지 */
 }
 
 .tile {
