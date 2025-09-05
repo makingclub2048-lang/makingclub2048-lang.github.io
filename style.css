@@ -7,6 +7,20 @@ body {
     padding: 20px 0;
 }
 
+/* 보드가 화면에 맞춰 줄어드는 유동 너비 */
+:root { --board-size: min(92vw, 560px); }   /* 데스크탑 최대 560px, 모바일은 92vw */
+#game-container {
+    width: var(--board-size);
+    height: var(--board-size);
+}
+
+/* 타일 글자도 보드 크기에 비례 */
+.tile { font-size: clamp(18px, calc(var(--board-size) / 14), 32px); }
+
+/* 버튼/네비 터치 타겟 */
+button, .nav a { min-height: 44px; padding: 10px 14px; }
+
+
 /* 브랜드 색 변수 (원소 포인트) */
 :root{
     --fire:  #ff4d4d;   /* 불: 빨강 */
@@ -255,3 +269,16 @@ button:hover { background: #555; }
     opacity: 1;
     transform: translateX(-50%) translateY(0);
 }
+
+.tile { will-change: transform, opacity; }
+@media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+}
+
+/* iOS 노치 안전 영역 */
+body { padding: env(safe-area-inset-top) env(safe-area-inset-right)
+env(safe-area-inset-bottom) env(safe-area-inset-left); }
+
+/* 기존 :hover 툴팁에 .show-tip도 동일 스타일 적용 */
+.tile[data-title]:hover::after,
+.tile[data-title].show-tip::after { opacity:1; transform: translateX(-50%) translateY(0); }
