@@ -82,7 +82,7 @@ const ultimateReward = { id: "worldtree", name: "World Tree", emoji: "🌳" };
 let discovered = new Set();
 let score = 0;
 let worldtreeUnlocked = false;
-let enableCrossElementDestroy = true; // 💥 다른 원소 충돌 소멸 토글
+let enableCrossElementDestroy = false; // 💥 다른 원소 충돌 소멸 토글
 
 const size = 4;
 let board = Array(size * size).fill(null);
@@ -248,7 +248,7 @@ function slideLine(line) {
                 if (enableCrossElementDestroy) {
                     if (getLevel(cur.id) === getLevel(nxt.id)) {
                         // 같은 단계의 다른 원소만 소멸
-                        updateScore(10);
+                        //updateScore(10);
                         destroyedPairs.push([result.length, result.length + 1]); // 로컬 기준
                         i++; // cur, nxt 둘 다 제거
                         continue;
