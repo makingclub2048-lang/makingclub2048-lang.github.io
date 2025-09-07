@@ -1,5 +1,38 @@
-// ===== 1) 원소 데이터 =====
+/* =========================================================
+ * Fuzion – Game Script (정리본)
+ * - 기능 변경 없음: 주석 강화, 중복 제거, 구조 정리
+ * - 전역 상수/상태 → 상단 정리
+ * - DOM 접근 캐싱, 보조 헬퍼 소규모 정리
+ * =======================================================*/
 
+/* =============== 0) 상수/전역 상태 =============== */
+
+// 보드 크기 (4x4)
+const size = 4;
+
+// 최종 보상
+const ultimateReward = { id: "worldtree", name: "World Tree", emoji: "🌳" };
+
+// 전역 상태
+let discovered = new Set();            // 발견된 타일 ID
+let score = 0;                         // 점수
+let worldtreeUnlocked = false;         // 월드트리 해금 여부
+let enableCrossElementDestroy = false; // 💥 다른 원소 충돌 시 소멸: 기본 OFF
+
+// DOM 캐시
+const $ = (sel) => document.querySelector(sel);
+const containerEl = $("#game-container");
+const scoreEl = $("#score");
+const toggleDestroyBtn = $("#toggle-destroy");
+const toggleDexBtn = $("#toggle-dex");
+const dexEl = $("#dex");
+const dexListEl = $("#dex-list");
+
+// 보드(1차원 배열, null 또는 타일 오브젝트 저장)
+let board = Array(size * size).fill(null);
+
+
+/* =============== 1) 원소 데이터 =============== */
 
 const elements = {
     fire: [
@@ -27,15 +60,14 @@ const elements = {
         { id: "air6", name: "Stormlord",  emoji: "⚡👑", next: null }
     ],
     earth: [
-        { id: "earth1", name: "Soil",     emoji: "🪨",   next: "earth2" },
-        { id: "earth2", name: "Mountain", emoji: "🏔",   next: "earth3" },
-        { id: "earth3", name: "Continent",emoji: "🌍",   next: "earth4" },
-        { id: "earth4", name: "Planet",   emoji: "🪐",   next: "earth5" },
-        { id: "earth5", name: "Earth",    emoji: "🌏",   next: "earth6" },
-        { id: "earth6", name: "World Titan", emoji: "🌌", next: null }
+        { id: "earth1", name: "Soil",        emoji: "🪨",   next: "earth2" },
+        { id: "earth2", name: "Mountain",    emoji: "🏔",   next: "earth3" },
+        { id: "earth3", name: "Continent",   emoji: "🌍",   next: "earth4" },
+        { id: "earth4", name: "Planet",      emoji: "🪐",   next: "earth5" },
+        { id: "earth5", name: "Earth",       emoji: "🌏",   next: "earth6" },
+        { id: "earth6", name: "World Titan", emoji: "🌌",   next: null }
     ]
 };
-
 
 const tileDesc = {
     // Fire
@@ -72,30 +104,18 @@ const tileDesc = {
 };
 
 
+/* =============== 2) 보드 헬퍼 =============== */
 
-
-
-
-const ultimateReward = { id: "worldtree", name: "World Tree", emoji: "🌳" };
-
-// ===== 2) 전역 상태 =====
-let discovered = new Set();
-let score = 0;
-let worldtreeUnlocked = false;
-let enableCrossElementDestroy = false; // 💥 다른 원소 충돌 소멸 토글
-
-const size = 4;
-let board = Array(size * size).fill(null);
-
-// ===== 3) 헬퍼 =====
+/** id로 타일 객체 검색 */
 function getTileById(id) {
-    for (let group in elements) {
+    for (const group in elements) {
         const found = elements[group].find(t => t.id === id);
         if (found) return found;
     }
     return null;
 }
 
+/** id 접두로 그룹명 반환 */
 function getGroup(id) {
     if (id.startsWith("fire"))  return "fire";
     if (id.startsWith("water")) return "water";
@@ -104,84 +124,64 @@ function getGroup(id) {
     return "";
 }
 
+/** id에서 레벨(숫자) 추출 */
 function getLevel(id) {
     const m = id.match(/\d+$/);
     return m ? parseInt(m[0], 10) : 1;
 }
 
-
+/** 다음 단계 타일 찾기 */
 function getNext(id) {
     const tile = getTileById(id);
     return tile && tile.next ? getTileById(tile.next) : null;
 }
 
+/** 점수 업데이트 */
 function updateScore(points) {
     score += points;
-    document.getElementById("score").textContent = `Score: ${score}`;
+    if (scoreEl) scoreEl.textContent = `Score: ${score}`;
 }
 
+/** 무작위 시작 타일 1개 스폰 */
 function addRandomTile() {
-    const empties = board.map((t, i) => (t === null ? i : null)).filter(i => i !== null);
-    if (empties.length === 0) return;
+    const empties = board
+        .map((t, i) => (t === null ? i : null))
+        .filter(i => i !== null);
+    if (!empties.length) return;
+
     const startTiles = ["fire1", "water1", "air1", "earth1"];
     const id = startTiles[Math.floor(Math.random() * startTiles.length)];
     const tile = getTileById(id);
 
-    const idx = Math.floor(Math.random() * empties.length);
-    board[empties[idx]] = tile;
+    const idx = empties[Math.floor(Math.random() * empties.length)];
+    board[idx] = tile;
 
     discovered.add(tile.id);
     updateDex();
 }
 
-// 방향에 따라 전 타일에 너지 + 글로우
-function subtleFeedback(direction) {
-    const container = document.getElementById("game-container");
-    const tiles = container.querySelectorAll(".tile");
 
-    // 클래스명 결정
-    const dirClass =
-        direction === "left"  ? "anim-nudge-left"  :
-            direction === "right" ? "anim-nudge-right" :
-                direction === "up"    ? "anim-nudge-up"    : "anim-nudge-down";
+/* =============== 3) 연출/렌더 =============== */
 
-    tiles.forEach(el => {
-        // 내용 있는 칸(타일 있는 칸)에만 강조
-        if (el.textContent && el.textContent.trim().length > 0) {
-            // 연속 입력에서도 재시작되도록 리셋 후 강제 리플로우
-            el.classList.remove("anim-glow", "anim-nudge-left", "anim-nudge-right", "anim-nudge-up", "anim-nudge-down");
-            void el.offsetWidth;
-            el.classList.add("anim-glow", dirClass);
-            // 자동 제거 (중복 누적 방지)
-            setTimeout(() => {
-                el.classList.remove("anim-glow", dirClass);
-            }, 400);
-        }
-    });
-}
-
-
-// ===== 4) 렌더 =====
-
-
-// render() 내부에서 각 타일 생성할 때:
+/** 보드 전체 렌더 */
 function render() {
-    const container = document.getElementById("game-container");
-    container.innerHTML = "";
+    containerEl.innerHTML = "";
     board.forEach((tile, i) => {
         const div = document.createElement("div");
         div.className = "tile";
+        div.setAttribute("data-idx", i);
+
         if (tile) {
             const name = getTileById(tile.id).name;
-            const desc = tileDesc?.[tile.id] || "";  // 설명 사전(없으면 빈 문자열)
-            const level = getLevel(tile.id);         // ⬅️ 레벨 추출
+            const desc = tileDesc?.[tile.id] || "";
+            const level = getLevel(tile.id);
 
             div.textContent = tile.emoji;
             div.setAttribute("data-id", tile.id);
             div.setAttribute("data-group", getGroup(tile.id));
             div.setAttribute("data-level", level);
 
-            // ⬅️ 툴팁 텍스트: "LV. X · 이름 — 설명"
+            // 툴팁: "LV. X · 이름 — 설명"
             const tip = `LV. ${level} · ${name}${desc ? " — " + desc : ""}`;
             div.setAttribute("data-title", tip);
         } else {
@@ -189,36 +189,59 @@ function render() {
             div.removeAttribute("data-title");
             div.removeAttribute("data-level");
         }
-        div.setAttribute("data-idx", i);
-        container.appendChild(div);
+
+        containerEl.appendChild(div);
     });
+
     checkUltimateReward();
 }
 
-
-/* 특정 인덱스에 애니메이션 클래스 부여 후 제거 */
+/** 특정 인덱스들에 애니메이션 클래스 부여 후 제거 */
 function pulseAt(indices, className) {
-    const container = document.getElementById("game-container");
     indices.forEach(idx => {
-        const cell = container.querySelector(`.tile[data-idx="${idx}"]`);
+        const cell = containerEl.querySelector(`.tile[data-idx="${idx}"]`);
         if (!cell) return;
-        cell.classList.remove(className); // 연속 입력 대비 리셋
-        // 강제 리플로우(재시작 트릭)
-        // eslint-disable-next-line no-unused-expressions
-        cell.offsetWidth;
+        // 재시작을 위해 제거 → 강제 리플로우 → 추가
+        cell.classList.remove(className);
+        void cell.offsetWidth; // reflow
         cell.classList.add(className);
         setTimeout(() => cell.classList.remove(className), 260);
     });
 }
 
+/** 이동 불발 시 전체에 살짝 피드백(너지+글로우) */
+function subtleFeedback(direction) {
+    const tiles = containerEl.querySelectorAll(".tile");
+    const dirClass =
+        direction === "left"  ? "anim-nudge-left"  :
+            direction === "right" ? "anim-nudge-right" :
+                direction === "up"    ? "anim-nudge-up"    : "anim-nudge-down";
 
-// ===== 5) 슬라이드/합성 핵심 =====
-// BUG FIX: 다른 원소 소멸 OFF일 때 양쪽 모두 유지되도록 로직을 재작성.
+    tiles.forEach(el => {
+        if (el.textContent && el.textContent.trim().length > 0) {
+            el.classList.remove("anim-glow", "anim-nudge-left", "anim-nudge-right", "anim-nudge-up", "anim-nudge-down");
+            void el.offsetWidth; // reflow
+            el.classList.add("anim-glow", dirClass);
+            setTimeout(() => el.classList.remove("anim-glow", dirClass), 400);
+        }
+    });
+}
+
+
+/* =============== 4) 슬라이드/합성 로직 =============== */
+
+/**
+ * 한 줄(배열 4칸)을 왼쪽 기준으로 슬라이드/합성
+ * - 같은 타일: 업그레이드 + 점수 (현재 100 고정)
+ * - 다른 원소: (토글 ON & 레벨 같을 때만) 소멸, 점수 X
+ * - 토글 OFF: 유지
+ * return { line: 결과배열, mergedAt: 합성 인덱스[], destroyedPairs: 소멸쌍 인덱스[] }
+ */
 function slideLine(line) {
-    const compact = line.filter(Boolean);
+    const compact = line.filter(Boolean); // null 제거
     const result = [];
-    const mergedAt = [];
-    const destroyedPairs = [];
+    const mergedAt = [];       // 시각 강조용
+    const destroyedPairs = []; // 시각 강조용 (로컬 인덱스 기준)
 
     for (let i = 0; i < compact.length; i++) {
         const cur = compact[i];
@@ -227,96 +250,85 @@ function slideLine(line) {
         if (hasNext) {
             const nxt = compact[i + 1];
 
+            // 1) 같은 타일 → 합성
             if (cur.id === nxt.id) {
                 const upgraded = getNext(cur.id);
                 if (upgraded) {
                     discovered.add(upgraded.id);
                     updateDex();
-                    updateScore(100);
-                    const place = result.length; // 병합 결과가 들어갈 로컬 위치
+                    updateScore(100); // 합성 점수 (정책대로 유지)
+                    const place = result.length;
                     result.push(upgraded);
                     mergedAt.push(place);
-                    i++; // nxt 소비
+                    i++; // 다음 항목 소비
                     continue;
                 } else {
-                    // 최종단계 → 병합 불가
+                    // 최종 단계이면 합성 불가 → 그대로 밀착
+                    result.push(cur);
+                    continue;
+                }
+            }
+
+            // 2) 다른 원소
+            if (enableCrossElementDestroy) {
+                // 같은 '레벨'의 다른 원소만 소멸
+                if (getLevel(cur.id) === getLevel(nxt.id)) {
+                    // 점수 없음
+                    destroyedPairs.push([result.length, result.length + 1]); // 로컬 기준
+                    i++; // cur, nxt 둘 다 제거
+                    continue;
+                } else {
+                    // 레벨 다르면 유지
                     result.push(cur);
                     continue;
                 }
             } else {
-                // 다른 계열
-                if (enableCrossElementDestroy) {
-                    if (getLevel(cur.id) === getLevel(nxt.id)) {
-                        // 같은 단계의 다른 원소만 소멸
-                        //updateScore(10);
-                        destroyedPairs.push([result.length, result.length + 1]); // 로컬 기준
-                        i++; // cur, nxt 둘 다 제거
-                        continue;
-                    } else {
-                        // 단계 다르면 유지
-                        result.push(cur);
-                        continue;
-                    }
-                } else {
-                    // 소멸 OFF → 유지
-                    result.push(cur);
-                    continue;
-                }
+                // 소멸 OFF → 유지
+                result.push(cur);
+                continue;
             }
         }
 
+        // 마지막/단독 요소 push
         result.push(cur);
     }
 
+    // 뒤쪽 null 채우기
     while (result.length < size) result.push(null);
+
     return { line: result, mergedAt, destroyedPairs };
 }
 
-
+/** 방향 이동 */
 function move(direction) {
     const before = JSON.stringify(board.map(t => (t ? t.id : null)));
 
-    // 애니메이션 모음
+    // 애니메이션 인덱스 수집
     const mergedGlobals = [];
     const destroyedGlobals = [];
-    let spawnedGlobal = null;
-
-    const pushSpawnIdx = () => {
-        // addRandomTile()가 채운 칸을 찾아서 popIn 효과 주기
-        const afterEmptyMask = board.map(t => (t ? 1 : 0));
-        // 이미 추가 전/후 비교가 필요하지만 간단히 마지막에 빈칸→채움 변화 탐색
-        // move 호출 직후 addRandomTile에서 하나만 채우므로, 가장 최근 빈 칸을 추정:
-        // 안전하게: 렌더 직후 전체를 스캔하면서 'anim-spawn'을 부여하도록 처리.
-    };
 
     if (direction === "left") {
         for (let r = 0; r < size; r++) {
-            const row = board.slice(r*size, r*size+size);
+            const row = board.slice(r * size, r * size + size);
             const { line: newRow, mergedAt, destroyedPairs } = slideLine(row);
-            for (let c = 0; c < size; c++) {
-                board[r*size+c] = newRow[c];
-            }
-            // 로컬 → 전역 매핑
-            mergedAt.forEach(loc => mergedGlobals.push(r*size + loc));
-            destroyedPairs.forEach(([aLoc, bLoc]) => {
-                destroyedGlobals.push(r*size + aLoc, r*size + bLoc);
+            for (let c = 0; c < size; c++) board[r * size + c] = newRow[c];
+            // 로컬 → 전역
+            mergedAt.forEach(loc => mergedGlobals.push(r * size + loc));
+            destroyedPairs.forEach(([a, b]) => {
+                destroyedGlobals.push(r * size + a, r * size + b);
             });
         }
     }
 
     if (direction === "right") {
         for (let r = 0; r < size; r++) {
-            const row = board.slice(r*size, r*size+size).reverse();
-            const { line: newRowRev, mergedAt, destroyedPairs } = slideLine(row);
-            const newRow = newRowRev.reverse();
-            for (let c = 0; c < size; c++) {
-                board[r*size+c] = newRow[c];
-            }
-            // 로컬(역방향) → 전역: loc=0은 우측 끝
-            mergedAt.forEach(loc => mergedGlobals.push(r*size + (size - 1 - loc)));
-            destroyedPairs.forEach(([aLoc, bLoc]) => {
-                destroyedGlobals.push(r*size + (size - 1 - aLoc),
-                    r*size + (size - 1 - bLoc));
+            const row = board.slice(r * size, r * size + size).reverse();
+            const { line: revNew, mergedAt, destroyedPairs } = slideLine(row);
+            const newRow = revNew.reverse();
+            for (let c = 0; c < size; c++) board[r * size + c] = newRow[c];
+            mergedAt.forEach(loc => mergedGlobals.push(r * size + (size - 1 - loc)));
+            destroyedPairs.forEach(([a, b]) => {
+                destroyedGlobals.push(r * size + (size - 1 - a), r * size + (size - 1 - b));
             });
         }
     }
@@ -324,12 +336,12 @@ function move(direction) {
     if (direction === "up") {
         for (let c = 0; c < size; c++) {
             const col = [];
-            for (let r = 0; r < size; r++) col.push(board[r*size+c]);
+            for (let r = 0; r < size; r++) col.push(board[r * size + c]);
             const { line: newCol, mergedAt, destroyedPairs } = slideLine(col);
-            for (let r = 0; r < size; r++) board[r*size+c] = newCol[r];
-            mergedAt.forEach(loc => mergedGlobals.push(loc*size + c));
-            destroyedPairs.forEach(([aLoc, bLoc]) => {
-                destroyedGlobals.push(aLoc*size + c, bLoc*size + c);
+            for (let r = 0; r < size; r++) board[r * size + c] = newCol[r];
+            mergedAt.forEach(loc => mergedGlobals.push(loc * size + c));
+            destroyedPairs.forEach(([a, b]) => {
+                destroyedGlobals.push(a * size + c, b * size + c);
             });
         }
     }
@@ -337,32 +349,29 @@ function move(direction) {
     if (direction === "down") {
         for (let c = 0; c < size; c++) {
             const col = [];
-            for (let r = 0; r < size; r++) col.push(board[r*size+c]);
-            const { line: newColRev, mergedAt, destroyedPairs } = slideLine(col.reverse());
-            const newCol = newColRev.reverse();
-            for (let r = 0; r < size; r++) board[r*size+c] = newCol[r];
-            mergedAt.forEach(loc => {
-                const global = (size - 1 - loc)*size + c;
-                mergedGlobals.push(global);
-            });
-            destroyedPairs.forEach(([aLoc, bLoc]) => {
-                destroyedGlobals.push((size - 1 - aLoc)*size + c,
-                    (size - 1 - bLoc)*size + c);
+            for (let r = 0; r < size; r++) col.push(board[r * size + c]);
+            const { line: revNew, mergedAt, destroyedPairs } = slideLine(col.reverse());
+            const newCol = revNew.reverse();
+            for (let r = 0; r < size; r++) board[r * size + c] = newCol[r];
+            mergedAt.forEach(loc => mergedGlobals.push((size - 1 - loc) * size + c));
+            destroyedPairs.forEach(([a, b]) => {
+                destroyedGlobals.push((size - 1 - a) * size + c, (size - 1 - b) * size + c);
             });
         }
     }
 
+    // 이동 결과 비교
     const after = JSON.stringify(board.map(t => (t ? t.id : null)));
-    if (before !== after) {
-        // 새 타일 추가 전, 이전 빈칸 스냅샷
-        const emptyBefore = [];
-        for (let i = 0; i < board.length; i++) {
-            if (board[i] === null) emptyBefore.push(i);
-        }
 
+    if (before !== after) {
+        // 새 타일 추가 전 빈칸 스냅샷
+        const emptyBefore = [];
+        for (let i = 0; i < board.length; i++) if (board[i] === null) emptyBefore.push(i);
+
+        // 새 타일 1개 스폰
         addRandomTile();
 
-        // 새로 채워진 칸 찾기
+        // 어떤 칸이 새로 채워졌는지 탐지
         const spawned = [];
         for (let i = 0; i < board.length; i++) {
             const wasEmpty = emptyBefore.includes(i);
@@ -370,76 +379,80 @@ function move(direction) {
             if (wasEmpty && nowFilled) spawned.push(i);
         }
 
+        // 렌더 + 애니메이션
         render();
-
-        // 애니메이션 적용
         if (mergedGlobals.length)    pulseAt(mergedGlobals, "anim-merge");
         if (destroyedGlobals.length) pulseAt(destroyedGlobals, "anim-destroy");
         if (spawned.length)          pulseAt(spawned, "anim-spawn");
+    } else {
+        // 변화 없음 → 미세 피드백
+        render();                  // 안전하게 최신 반영
+        subtleFeedback(direction); // 부드러운 글로우 + 너지
     }
-    // 변화 없을 때 살짝 깜빡임
-    else {
-        // 이동이 없을 때: 부드러운 글로우 + 방향감 있는 너지
-        render();                 // 최신 상태 반영(안전)
-        subtleFeedback(direction); // 새 애니메이션
-    }
-
 }
 
 
-// ===== 6) 입력 & 도감 & 보상 =====
-document.addEventListener("keydown", e => {
-    if (e.key === "ArrowLeft") move("left");
+/* =============== 5) 입력/도감/보상 =============== */
+
+// 키보드 입력
+document.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowLeft")  move("left");
     if (e.key === "ArrowRight") move("right");
-    if (e.key === "ArrowUp") move("up");
-    if (e.key === "ArrowDown") move("down");
+    if (e.key === "ArrowUp")    move("up");
+    if (e.key === "ArrowDown")  move("down");
 });
 
-document.getElementById("toggle-destroy").addEventListener("click", () => {
-    enableCrossElementDestroy = !enableCrossElementDestroy;
-    document.getElementById("toggle-destroy").textContent =
-        enableCrossElementDestroy ? "💥 Cross-element collision: ON"
+// 💥 충돌 소멸 토글
+if (toggleDestroyBtn) {
+    toggleDestroyBtn.addEventListener("click", () => {
+        enableCrossElementDestroy = !enableCrossElementDestroy;
+        toggleDestroyBtn.textContent = enableCrossElementDestroy
+            ? "💥 Cross-element collision: ON"
             : "💥 Cross-element collision: OFF";
-});
+    });
+}
 
-
+/** 도감 렌더 */
 function updateDex() {
-    const dexList = document.getElementById("dex-list");
-    if (!dexList) return;
-    dexList.innerHTML = "";
-    // 정렬: 보기 좋게
-    const ids = Array.from(discovered.values());
-    ids.sort();
+    if (!dexListEl) return;
+    dexListEl.innerHTML = "";
+
+    // 정렬 후 그리기
+    const ids = Array.from(discovered.values()).sort();
     ids.forEach(id => {
         const tile = getTileById(id);
-        if (tile) {
-            const div = document.createElement("div");
-            div.className = "dex-item";
-            div.title = tile.name;
-            div.textContent = tile.emoji;
-            dexList.appendChild(div);
-        }
+        if (!tile) return;
+        const div = document.createElement("div");
+        div.className = "dex-item";
+        div.title = tile.name;
+        div.textContent = tile.emoji;
+        dexListEl.appendChild(div);
     });
+
     if (worldtreeUnlocked) {
         const div = document.createElement("div");
         div.className = "dex-item";
         div.title = ultimateReward.name;
         div.textContent = ultimateReward.emoji;
-        dexList.appendChild(div);
+        dexListEl.appendChild(div);
     }
 }
 
-document.getElementById("toggle-dex").addEventListener("click", () => {
-    const dex = document.getElementById("dex");
-    dex.style.display = dex.style.display === "none" ? "block" : "none";
-});
+// 도감 표시 토글
+if (toggleDexBtn && dexEl) {
+    toggleDexBtn.addEventListener("click", () => {
+        dexEl.style.display = (dexEl.style.display === "none" ? "block" : "none");
+    });
+}
 
+/** 최종 보상 체크 */
 function checkUltimateReward() {
     const done =
-        discovered.has("fire6") &&
+        discovered.has("fire6")  &&
         discovered.has("water6") &&
-        discovered.has("air6") &&
+        discovered.has("air6")   &&
         discovered.has("earth6");
+
     if (done && !worldtreeUnlocked) {
         worldtreeUnlocked = true;
         updateDex();
@@ -447,12 +460,15 @@ function checkUltimateReward() {
     }
 }
 
-// ===== 7) 초기화 =====
+
+/* =============== 6) 초기화 =============== */
+
 function init() {
     score = 0;
     worldtreeUnlocked = false;
     discovered = new Set();
     board = Array(size * size).fill(null);
+
     addRandomTile();
     addRandomTile();
     updateScore(0);
@@ -460,35 +476,43 @@ function init() {
     render();
 }
 
+// 시작!
 init();
 
-const boardEl = document.getElementById('game-container');
-let startX=0, startY=0, dragging=false;
 
-boardEl.addEventListener('pointerdown', (e) => {
+/* =============== 7) 터치/포인터 입력 =============== */
+// (동작 동일, 가독성만 개선)
+const boardEl = containerEl;
+let startX = 0, startY = 0, dragging = false;
+
+boardEl.addEventListener("pointerdown", (e) => {
     dragging = true;
     startX = e.clientX; startY = e.clientY;
     boardEl.setPointerCapture(e.pointerId);
 });
 
-boardEl.addEventListener('pointermove', (e) => {
+boardEl.addEventListener("pointermove", (e) => {
     if (!dragging) return;
-    // touch-action:none 덕분에 preventDefault 필요 없음
+    // touch-action: none 으로 preventDefault 불필요
 });
 
-function endSwipe(e){
+function endSwipe(e) {
     if (!dragging) return;
     dragging = false;
+
     const dx = e.clientX - startX;
     const dy = e.clientY - startY;
     const ax = Math.abs(dx), ay = Math.abs(dy);
-    const threshold = 24;
+    const threshold = 24; // 최소 스와이프 길이
+
     if (ax < threshold && ay < threshold) return;
 
-    const dir = ax > ay ? (dx > 0 ? 'right' : 'left')
-        : (dy > 0 ? 'down' : 'up');
-    move(dir); // 기존 이동 함수 호출
+    const dir = ax > ay
+        ? (dx > 0 ? "right" : "left")
+        : (dy > 0 ? "down" : "up");
+
+    move(dir);
 }
 
-boardEl.addEventListener('pointerup', endSwipe);
-boardEl.addEventListener('pointercancel', ()=> dragging=false);
+boardEl.addEventListener("pointerup", endSwipe);
+boardEl.addEventListener("pointercancel", () => (dragging = false));
