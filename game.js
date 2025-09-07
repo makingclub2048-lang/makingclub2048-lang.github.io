@@ -514,5 +514,39 @@ function endSwipe(e) {
     move(dir);
 }
 
+// 입력창에서 타이핑 중일 땐 가로채지 않기
+function isTypingTarget(el) {
+    return el && (
+        el.tagName === 'INPUT' ||
+        el.tagName === 'TEXTAREA' ||
+        el.isContentEditable === true
+    );
+}
+
+// 전역 키다운에서 화살표 기본 동작(스크롤 등) 차단 → move()만 호출
+window.addEventListener('keydown', (e) => {
+    if (isTypingTarget(e.target)) return; // 폼/입력에는 간섭 X
+
+    switch (e.key) {
+        case 'ArrowLeft':
+            e.preventDefault();
+            move('left');
+            break;
+        case 'ArrowRight':
+            e.preventDefault();
+            move('right');
+            break;
+        case 'ArrowUp':
+            e.preventDefault();
+            move('up');
+            break;
+        case 'ArrowDown':
+            e.preventDefault();
+            move('down');
+            break;
+    }
+}, { passive: false }); // ← 반드시 passive:false 여야 preventDefault가 먹음
+
+
 boardEl.addEventListener("pointerup", endSwipe);
 boardEl.addEventListener("pointercancel", () => (dragging = false));

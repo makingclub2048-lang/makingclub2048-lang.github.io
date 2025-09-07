@@ -276,3 +276,10 @@ button:hover { background: #555; }
 @media (prefers-reduced-motion: reduce) {
     * { animation: none !important; transition: none !important; }
 }
+
+
+/* 버튼은 드래그/더블탭 확대 등 기본 제스처를 최소화 */
+.no-drag {
+    touch-action: manipulation;
+    user-select: none;
+}
