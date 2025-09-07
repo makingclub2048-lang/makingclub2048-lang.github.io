@@ -202,8 +202,12 @@ function playSlideAnimations(moves, done){
 
         g.style.left = `${p0.x}px`;
         g.style.top  = `${p0.y}px`;
+        g.style.width  = `${cell}px`;   // 👈 여기 추가
+        g.style.height = `${cell}px`;   // 👈 여기 추가
         g._dx = p1.x - p0.x;
         g._dy = p1.y - p0.y;
+
+
 
         fx.appendChild(g);
         return g;
