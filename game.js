@@ -185,44 +185,70 @@ function playSlideAnimations(moves, done){
     isAnimating = true;
 
     const fx = document.getElementById('fx-layer');
+    const cont = document.getElementById('game-container');
     fx.innerHTML = '';
 
-    const {cell} = getBoardGeom();
-    fx.style.setProperty('--cell', `${cell}px`);
+    // 1) 고스트가 출발할 원본 칸들을 '잠깐' 숨긴다
+    //    (레이아웃 유지 위해 visibility 사용)
+    const fromIdxSet = new Set(
+        moves.map(m => m.from.r * size + m.from.c)
+    );
+    const hiddenEls = [];
+    fromIdxSet.forEach(idx => {
+        const el = cont.querySelector(`.tile[data-idx="${idx}"]`);
+        if (el) {
+            el.style.visibility = 'hidden';
+            hiddenEls.push(el);
+        }
+    });
 
-    // 시작 프레임: from 좌표에 고스트 생성
+    // 2) 컨테이너 기준 좌표
+    const cRect = cont.getBoundingClientRect();
+
+    // 3) 고스트 생성 (실제 DOM 좌표 기준: 마진/패딩/반올림 오차 無)
     const ghosts = moves.map(m => {
-        const p0 = rcToXY(m.from.r, m.from.c);
-        const p1 = rcToXY(m.to.r,   m.to.c);
+        const fromIdx = m.from.r * size + m.from.c;
+        const toIdx   = m.to.r   * size + m.to.c;
+
+        const fromEl = cont.querySelector(`.tile[data-idx="${fromIdx}"]`);
+        const toEl   = cont.querySelector(`.tile[data-idx="${toIdx}"]`);
+
+        const fr = fromEl.getBoundingClientRect();
+        const tr = (toEl ? toEl : fromEl).getBoundingClientRect();
 
         const g = document.createElement('div');
         g.className = 'tile-ghost';
         g.textContent = m.text;
         if (m.group) g.dataset.group = m.group;
 
-        g.style.left = `${p0.x}px`;
-        g.style.top  = `${p0.y}px`;
-        g.style.width  = `${cell}px`;   // 👈 여기 추가
-        g.style.height = `${cell}px`;   // 👈 여기 추가
-        g._dx = p1.x - p0.x;
-        g._dy = p1.y - p0.y;
+        g.style.width  = `${fr.width}px`;
+        g.style.height = `${fr.height}px`;
+        g.style.left = `${fr.left - cRect.left}px`;
+        g.style.top  = `${fr.top  - cRect.top }px`;
 
-
+        g._dx = (tr.left - fr.left);
+        g._dy = (tr.top  - fr.top );
 
         fx.appendChild(g);
         return g;
     });
 
-    // 다음 프레임에 목적지로 이동
+    // 4) 슬라이드 시작 → 종료 후 정리 & 실제 보드 확정/렌더
     requestAnimationFrame(()=>{
         ghosts.forEach(g=>{
             g.style.transform = `translate3d(${g._dx}px, ${g._dy}px, 0)`;
         });
+
         setTimeout(()=>{
             fx.innerHTML = '';
+
+            // 원본 숨김 복원은 생략: 어차피 다음 render()에서 DOM이 재구성됨
+            // (혹시 안전차원에서 복원하고 싶으면 주석 해제)
+            // hiddenEls.forEach(el => el.style.visibility = '');
+
             isAnimating = false;
             done?.();
-        }, 160); // CSS 150ms + 여유
+        }, 160); // CSS transition(150ms) + 여유
     });
 }
 
