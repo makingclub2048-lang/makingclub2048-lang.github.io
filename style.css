@@ -1,3 +1,30 @@
+/* =========================================
+   Fuzion – Clean CSS (정리/주석/중복 제거)
+   - 셀은 항상 정사각형 (aspect-ratio)
+   - 셀 간격 가로/세로 동일 (grid-gap 변수 통일)
+   - 중복 선언(#game-container, .tile 등) 제거
+   - 모바일 터치/안전영역 유지
+   ========================================= */
+
+/* ---------- Global variables ---------- */
+:root{
+    /* 보드 전체 크기: 모바일 92vw, 데스크탑 최대 560px */
+    --board-size: min(92vw, 560px);
+
+    /* 그리드 간격(가로/세로 동일)과 보드 패딩 통일 */
+    --grid-gap: 5px;
+
+    /* 셀 라운드 값 */
+    --cell-radius: 10px;
+
+    /* 브랜드 컬러(원소 포인트) */
+    --fire:  #ff4d4d;
+    --water: #45a8ff;
+    --air:   #4de1b6;
+    --earth: #b07a3c;
+}
+
+/* ---------- Base ---------- */
 body {
     font-family: sans-serif;
     text-align: center;
@@ -5,37 +32,21 @@ body {
     color: #fff;
     margin: 0;
     padding: 20px 0;
+
+    /* iOS 노치 안전 영역 */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
-/* 보드가 화면에 맞춰 줄어드는 유동 너비 */
-:root { --board-size: min(92vw, 560px); }   /* 데스크탑 최대 560px, 모바일은 92vw */
-#game-container {
-    width: var(--board-size);
-    height: var(--board-size);
-}
-
-/* 타일 글자도 보드 크기에 비례 */
-.tile { font-size: clamp(18px, calc(var(--board-size) / 14), 32px); }
-
-/* 버튼/네비 터치 타겟 */
+/* 버튼/네비 터치 타겟 추천 크기 */
 button, .nav a { min-height: 44px; padding: 10px 14px; }
 
-
-/* 브랜드 색 변수 (원소 포인트) */
-:root{
-    --fire:  #ff4d4d;   /* 불: 빨강 */
-    --water: #45a8ff;   /* 물: 파랑 */
-    --air:   #4de1b6;   /* 바람: 민트 */
-    --earth: #b07a3c;   /* 흙: 갈색 */
-}
-
-/* 전체 래퍼 */
+/* ---------- Brand / Logo ---------- */
 .brand{
     display:flex; flex-direction:column; align-items:center; gap:.25rem;
     margin: 6px 0 12px;
 }
 
-/* 로고 텍스트 */
 .logo{
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, Inter, sans-serif;
     font-weight: 900;
@@ -43,7 +54,7 @@ button, .nav a { min-height: 44px; padding: 10px 14px; }
     line-height: 1;
     font-size: clamp(40px, 8vw, 110px);
 
-    /* 그라데이션 핵심 */
+    /* 그라데이션 텍스트 */
     background: linear-gradient(
             90deg,
             var(--fire) 0% 23%,
@@ -54,35 +65,27 @@ button, .nav a { min-height: 44px; padding: 10px 14px; }
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
-    -webkit-text-fill-color: transparent; /* 사파리 필수 */
+    -webkit-text-fill-color: transparent;
 
     /* 가독성 보정 */
     text-shadow: 0 2px 0 rgba(0,0,0,.25);
     filter: drop-shadow(0 6px 18px rgba(0,0,0,.28));
     position: relative;
-    display: inline-block;      /* 글자 주변만 히트영역 */
-    /* (필요시) 패딩을 줄이면 히트영역이 더 타이트해짐 */
+    display: inline-block;
     padding: 0;
     margin: 0;
 }
 
-
-
-
-/* 슬로건 */
-.tagline {
+.tagline{
     font: 600 14px/1.3 system-ui, Inter, sans-serif;
     letter-spacing: .02em;
     color: #cfd6dd;
     opacity: .9;
 }
 
-
-
-
-
 h1 { margin: 0 0 10px; }
 
+/* ---------- Toolbar ---------- */
 .toolbar {
     display: flex;
     gap: 10px;
@@ -104,39 +107,153 @@ button {
 }
 button:hover { background: #555; }
 
+/* ---------- Board (Grid) ---------- */
+/* 보드는 “한 번만” 정의합니다 (중복 제거) */
 #game-container {
-    width: 400px;
-    height: 400px;
+    width: var(--board-size);
+    height: var(--board-size);
     margin: 10px auto 20px;
+
     display: grid;
+    /* 4x4라면 repeat(4, 1fr). JS에서 N 변경 시 이 부분도 동기화 필요 */
     grid-template-columns: repeat(4, 1fr);
-    grid-gap: 5px;
+
+    /* 가로/세로 동일 간격 */
+    gap: var(--grid-gap);
+
+    /* 보드 테두리/패딩도 간격과 통일 */
     background: #333;
-    padding: 5px;
-    border-radius: 10px;
-    overflow: visible; /* 혹시라도 잘리는 것 방지 */
-    touch-action: none;           /* 크롬/안드로이드: 터치 제스처(팬/줌) 금지 */
-    overscroll-behavior: contain; /* 경계 넘길 때 상위로 스크롤 전파 방지 */
+    padding: var(--grid-gap);
+    border-radius: var(--cell-radius);
+    overflow: visible;
+
+    /* 모바일 크롬 스와이프가 화면 스크롤로 먹히지 않도록 */
+    touch-action: none;
+    overscroll-behavior: contain;
 }
 
+/* ---------- Cell / Tile ---------- */
 .tile {
     display: flex;
     align-items: center;
     justify-content: center;
+
+    /* 셀 배경/모서리 */
     background: #444;
-    font-size: 2rem;
     border-radius: 8px;
-    height: 90px;
+
+    /* 고정 높이 제거 → 항상 정사각형 유지 */
+    /* height: 90px;  <-- 삭제 */
+    aspect-ratio: 1 / 1;
+
+    /* 폰트는 보드 크기에 비례 */
+    font-size: clamp(18px, calc(var(--board-size) / 14), 32px);
+
     position: relative;
-    overflow: visible;  /* 타일 경계 넘어가도 보이게 */
+    overflow: visible;  /* 경계 밖 이펙트 보이게 */
+    will-change: transform, box-shadow; /* 애니 대비 */
 }
 
+/* 요소(원소) 그룹별 기본색 */
+.tile[data-group="fire"]  { background: #7a2e2e; }
+.tile[data-group="water"] { background: #204e7a; }
+.tile[data-group="air"]   { background: #2e6b5c; }
+.tile[data-group="earth"] { background: #5a4a2b; }
+
+/* ---------- Animations (공통) ---------- */
+.anim-spawn   { animation: popIn 150ms ease-out; }
+.anim-merge   { animation: mergePulse 220ms ease-out; }
+.anim-destroy { animation: destroyFade 180ms ease-in forwards; }
+.anim-flash   { animation: flash 180ms ease-out; }
+.anim-glow    { animation: softGlow 360ms ease-out; }
+
+@keyframes popIn {
+    from { transform: scale(0.6); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
+}
+
+@keyframes mergePulse {
+    0%   { transform: scale(1);    box-shadow: 0 0 0 rgba(255,255,255,0.0); }
+    50%  { transform: scale(1.12); box-shadow: 0 0 12px rgba(255,255,255,0.35); }
+    100% { transform: scale(1);    box-shadow: 0 0 0 rgba(255,255,255,0.0); }
+}
+
+@keyframes destroyFade {
+    0%   { transform: scale(1);   opacity: 1;   filter: blur(0); }
+    100% { transform: scale(0.8); opacity: 0;   filter: blur(2px); }
+}
+
+@keyframes flash {
+    0%   { box-shadow: 0 0 0 rgba(255,255,255,0.0); }
+    50%  { box-shadow: 0 0 14px rgba(255,255,255,0.45); }
+    100% { box-shadow: 0 0 0 rgba(255,255,255,0.0); }
+}
+
+@keyframes softGlow {
+    0%   { box-shadow: 0 0 0 rgba(255,255,255,0.0); }
+    35%  { box-shadow: 0 0 14px rgba(255,255,255,0.35); }
+    70%  { box-shadow: 0 0 8px rgba(255,255,255,0.20); }
+    100% { box-shadow: 0 0 0 rgba(255,255,255,0.0); }
+}
+
+/* 방향감 있는 살짝 밀림 */
+.anim-nudge-left  { animation: nudgeLeft  280ms cubic-bezier(.18,.69,.24,1.04); }
+.anim-nudge-right { animation: nudgeRight 280ms cubic-bezier(.18,.69,.24,1.04); }
+.anim-nudge-up    { animation: nudgeUp    280ms cubic-bezier(.18,.69,.24,1.04); }
+.anim-nudge-down  { animation: nudgeDown  280ms cubic-bezier(.18,.69,.24,1.04); }
+
+@keyframes nudgeLeft  { 0%{transform:translateX(0)} 40%{transform:translateX(-6px)} 100%{transform:translateX(0)} }
+@keyframes nudgeRight { 0%{transform:translateX(0)} 40%{transform:translateX( 6px)} 100%{transform:translateX(0)} }
+@keyframes nudgeUp    { 0%{transform:translateY(0)} 40%{transform:translateY(-6px)} 100%{transform:translateY(0)} }
+@keyframes nudgeDown  { 0%{transform:translateY(0)} 40%{transform:translateY( 6px)} 100%{transform:translateY(0)} }
+
+/* ---------- Tooltip ---------- */
+.tile[data-title] { position: relative; }
+
+.tile[data-title]::after {
+    content: attr(data-title);
+    position: absolute;
+    left: 50%;
+    bottom: 115%;
+    transform: translateX(-50%) translateY(6px);
+
+    /* 가로로 넓게, 너무 길면 줄임표 */
+    display: inline-block;
+    width: max-content;
+    max-width: 420px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    /* 스타일 */
+    line-height: 1.35;
+    background: rgba(0,0,0,0.88);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 12px;
+    border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+    z-index: 10;
+
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease, transform 160ms ease;
+}
+.tile[data-title]:hover::after,
+.tile[data-title].show-tip::after {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* ---------- Dex (사전) ---------- */
 #dex {
     margin: 0 auto;
-    width: 400px;
+    width: var(--board-size);          /* 보드와 너비 동기화 */
+    max-width: 560px;
     padding: 10px;
     background: #333;
-    border-radius: 10px;
+    border-radius: var(--cell-radius);
 }
 
 #dex-list {
@@ -155,119 +272,7 @@ button:hover { background: #555; }
     font-size: 1.5rem;
 }
 
-/* === 요소별 베이스 색 (가시성↑) === */
-.tile[data-group="fire"]  { background: #7a2e2e; }
-.tile[data-group="water"] { background: #204e7a; }
-.tile[data-group="air"]   { background: #2e6b5c; }
-.tile[data-group="earth"] { background: #5a4a2b; }
-
-/* === 공통 애니메이션 클래스 === */
-.anim-spawn   { animation: popIn 150ms ease-out; }
-.anim-merge   { animation: mergePulse 220ms ease-out; }
-.anim-destroy { animation: destroyFade 180ms ease-in forwards; }
-.anim-flash   { animation: flash 180ms ease-out; }
-
-@keyframes popIn {
-    from { transform: scale(0.6); opacity: 0; }
-    to   { transform: scale(1);   opacity: 1; }
-}
-
-@keyframes mergePulse {
-    0%   { transform: scale(1);   box-shadow: 0 0 0px rgba(255,255,255,0.0); }
-    50%  { transform: scale(1.12); box-shadow: 0 0 12px rgba(255,255,255,0.35); }
-    100% { transform: scale(1);   box-shadow: 0 0 0px rgba(255,255,255,0.0); }
-}
-
-@keyframes destroyFade {
-    0%   { transform: scale(1);   opacity: 1;   filter: blur(0px); }
-    100% { transform: scale(0.8); opacity: 0.0; filter: blur(2px); }
-}
-
-@keyframes flash {
-    0%   { box-shadow: 0 0 0px rgba(255,255,255,0.0); }
-    50%  { box-shadow: 0 0 14px rgba(255,255,255,0.45); }
-    100% { box-shadow: 0 0 0px rgba(255,255,255,0.0); }
-}
-
-/* 기존 flash 대체: 부드러운 글로우 (길게) */
-.anim-glow {
-    animation: softGlow 360ms ease-out;
-}
-
-@keyframes softGlow {
-    0%   { box-shadow: 0 0 0px rgba(255,255,255,0.0); }
-    35%  { box-shadow: 0 0 14px rgba(255,255,255,0.35); }
-    70%  { box-shadow: 0 0 8px rgba(255,255,255,0.20); }
-    100% { box-shadow: 0 0 0px rgba(255,255,255,0.0); }
-}
-
-/* 방향감 있는 ‘살짝 밀림’ 너지 */
-.anim-nudge-left  { animation: nudgeLeft  280ms cubic-bezier(.18,.69,.24,1.04); }
-.anim-nudge-right { animation: nudgeRight 280ms cubic-bezier(.18,.69,.24,1.04); }
-.anim-nudge-up    { animation: nudgeUp    280ms cubic-bezier(.18,.69,.24,1.04); }
-.anim-nudge-down  { animation: nudgeDown  280ms cubic-bezier(.18,.69,.24,1.04); }
-
-@keyframes nudgeLeft  { 0%{transform:translateX(0)} 40%{transform:translateX(-6px)} 100%{transform:translateX(0)} }
-@keyframes nudgeRight { 0%{transform:translateX(0)} 40%{transform:translateX( 6px)} 100%{transform:translateX(0)} }
-@keyframes nudgeUp    { 0%{transform:translateY(0)} 40%{transform:translateY(-6px)} 100%{transform:translateY(0)} }
-@keyframes nudgeDown  { 0%{transform:translateY(0)} 40%{transform:translateY( 6px)} 100%{transform:translateY(0)} }
-
-/* 겹쳐 써도 자연스럽게 보이도록 transform 충돌 완화 */
-.tile {
-    /* 기존 스타일 유지 + transform 애니 대비 */
-    will-change: transform, box-shadow;
-}
-
-/* 호버 툴팁 */
-.tile[data-title] { position: relative; }
-
-.tile[data-title]::after {
-    content: attr(data-title);
-    position: absolute;
-    left: 50%;
-    bottom: 115%;
-    transform: translateX(-50%) translateY(6px);
-
-    /* === 가로 확장 핵심 설정 === */
-    display: inline-block;     /* 인라인폭 제한 벗어나기 */
-    width: max-content;        /* 내용 길이만큼 가로로 뻗기 */
-    max-width: 420px;          /* 하지만 너무 길면 여기서 제한 */
-    white-space: nowrap;       /* 기본은 한 줄로(세로로 안 길어짐) */
-
-    /* 텍스트가 너무 길면 … 으로 처리 (선택) */
-    overflow: hidden;
-    text-overflow: ellipsis;
-
-    /* 스타일 */
-    line-height: 1.35;
-    background: rgba(0,0,0,0.88);
-    color: #fff;
-    font-size: 13px;
-    font-weight: 600;
-    padding: 8px 12px;
-    border-radius: 8px;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 160ms ease, transform 160ms ease;
-    z-index: 10;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
-}
-
-.tile[data-title]:hover::after {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-}
-
-.tile { will-change: transform, opacity; }
+/* ---------- 접근성: 모션 최소화 ---------- */
 @media (prefers-reduced-motion: reduce) {
     * { animation: none !important; transition: none !important; }
 }
-
-/* iOS 노치 안전 영역 */
-body { padding: env(safe-area-inset-top) env(safe-area-inset-right)
-env(safe-area-inset-bottom) env(safe-area-inset-left); }
-
-/* 기존 :hover 툴팁에 .show-tip도 동일 스타일 적용 */
-.tile[data-title]:hover::after,
-.tile[data-title].show-tip::after { opacity:1; transform: translateX(-50%) translateY(0); }
-
