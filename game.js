@@ -160,6 +160,68 @@ function addRandomTile() {
     updateDex();
 }
 
+/* === 절대 슬라이드 좌표 헬퍼 === */
+const N = size;            // 보드 한 변 (4)
+let isAnimating = false;   // 애니 중 입력 잠금
+
+function getBoardGeom(){
+    const cont = document.getElementById('game-container');
+    const cs = getComputedStyle(cont);
+    const gap = parseFloat(cs.gap || cs.gridGap || '5') || 5;
+    const pad = parseFloat(cs.padding || '0') || 0;
+    const w = cont.clientWidth;
+    const cell = (w - pad*2 - gap*(N-1)) / N;
+    return {cont, gap, pad, cell};
+}
+/** (r,c) -> 보드 내부 좌상단 픽셀 */
+function rcToXY(r, c){
+    const {gap, pad, cell} = getBoardGeom();
+    return { x: pad + c*(cell+gap), y: pad + r*(cell+gap), cell };
+}
+
+/** 고스트 슬라이드 플레이어 */
+function playSlideAnimations(moves, done){
+    if (!moves || !moves.length){ done?.(); return; }
+    isAnimating = true;
+
+    const fx = document.getElementById('fx-layer');
+    fx.innerHTML = '';
+
+    const {cell} = getBoardGeom();
+    fx.style.setProperty('--cell', `${cell}px`);
+
+    // 시작 프레임: from 좌표에 고스트 생성
+    const ghosts = moves.map(m => {
+        const p0 = rcToXY(m.from.r, m.from.c);
+        const p1 = rcToXY(m.to.r,   m.to.c);
+
+        const g = document.createElement('div');
+        g.className = 'tile-ghost';
+        g.textContent = m.text;
+        if (m.group) g.dataset.group = m.group;
+
+        g.style.left = `${p0.x}px`;
+        g.style.top  = `${p0.y}px`;
+        g._dx = p1.x - p0.x;
+        g._dy = p1.y - p0.y;
+
+        fx.appendChild(g);
+        return g;
+    });
+
+    // 다음 프레임에 목적지로 이동
+    requestAnimationFrame(()=>{
+        ghosts.forEach(g=>{
+            g.style.transform = `translate3d(${g._dx}px, ${g._dy}px, 0)`;
+        });
+        setTimeout(()=>{
+            fx.innerHTML = '';
+            isAnimating = false;
+            done?.();
+        }, 160); // CSS 150ms + 여유
+    });
+}
+
 
 /* =============== 3) 연출/렌더 =============== */
 
@@ -237,33 +299,50 @@ function subtleFeedback(direction) {
  * - 토글 OFF: 유지
  * return { line: 결과배열, mergedAt: 합성 인덱스[], destroyedPairs: 소멸쌍 인덱스[] }
  */
-function slideLine(line) {
+/**
+ * 한 줄(배열 4칸)을 왼쪽 기준으로 슬라이드/합성
+ * positions: line의 각 칸 인덱스(0..size-1) 중 null이 아닌 원래 위치 목록 (예: [0,2,3])
+ * returns:
+ *  { line, mergedAt, destroyedPairs, movesLocal }
+ *  - movesLocal: [{fromLoc, toLoc, text, group, type:'move'|'merge'|'vanish'}]
+ */
+function slideLine(line, positions) {
     const compact = line.filter(Boolean); // null 제거
     const result = [];
-    const mergedAt = [];       // 시각 강조용
-    const destroyedPairs = []; // 시각 강조용 (로컬 인덱스 기준)
+    const mergedAt = [];       // 시각 강조용(로컬 인덱스)
+    const destroyedPairs = []; // 시각 강조용(로컬 인덱스쌍)
+    const movesLocal = [];     // 절대 슬라이드용(fromLoc -> toLoc)
 
     for (let i = 0; i < compact.length; i++) {
         const cur = compact[i];
+        const fromLocCur = positions[i];
         const hasNext = i < compact.length - 1;
 
         if (hasNext) {
             const nxt = compact[i + 1];
+            const fromLocNxt = positions[i + 1];
 
-            // 1) 같은 타일 → 합성
+            // 1) 같은 타일 → 합성(두 개 모두 같은 toLoc로 이동)
             if (cur.id === nxt.id) {
                 const upgraded = getNext(cur.id);
                 if (upgraded) {
+                    const place = result.length; // toLoc
+                    // 슬라이드 계획: 두 조각이 같은 칸으로 모임
+                    movesLocal.push(
+                        { fromLoc: fromLocCur, toLoc: place, text: cur.emoji, group: getGroup(cur.id), type: 'merge' },
+                        { fromLoc: fromLocNxt, toLoc: place, text: nxt.emoji, group: getGroup(nxt.id), type: 'merge' }
+                    );
                     discovered.add(upgraded.id);
                     updateDex();
-                    updateScore(100); // 합성 점수 (정책대로 유지)
-                    const place = result.length;
+                    updateScore(100); // 합성 점수
                     result.push(upgraded);
                     mergedAt.push(place);
-                    i++; // 다음 항목 소비
+                    i++; // nxt 소비
                     continue;
                 } else {
-                    // 최종 단계이면 합성 불가 → 그대로 밀착
+                    // 최종단계 → 합성 불가 → 그대로 밀착
+                    const place = result.length;
+                    movesLocal.push({ fromLoc: fromLocCur, toLoc: place, text: cur.emoji, group: getGroup(cur.id), type: 'move' });
                     result.push(cur);
                     continue;
                 }
@@ -271,123 +350,197 @@ function slideLine(line) {
 
             // 2) 다른 원소
             if (enableCrossElementDestroy) {
-                // 같은 '레벨'의 다른 원소만 소멸
+                // 같은 레벨의 다른 원소만 소멸 → 둘 다 같은 충돌점으로 이동 후 사라짐
                 if (getLevel(cur.id) === getLevel(nxt.id)) {
-                    // 점수 없음
-                    destroyedPairs.push([result.length, result.length + 1]); // 로컬 기준
+                    const collideAt = result.length; // 충돌 지점
+                    movesLocal.push(
+                        { fromLoc: fromLocCur, toLoc: collideAt, text: cur.emoji, group: getGroup(cur.id), type: 'vanish' },
+                        { fromLoc: fromLocNxt, toLoc: collideAt, text: nxt.emoji, group: getGroup(nxt.id), type: 'vanish' }
+                    );
+                    destroyedPairs.push([collideAt, collideAt]); // 시각 강조용(옵션)
                     i++; // cur, nxt 둘 다 제거
                     continue;
                 } else {
-                    // 레벨 다르면 유지
+                    // 레벨 다르면 유지 → cur만 자리로 이동
+                    const place = result.length;
+                    movesLocal.push({ fromLoc: fromLocCur, toLoc: place, text: cur.emoji, group: getGroup(cur.id), type: 'move' });
                     result.push(cur);
                     continue;
                 }
             } else {
-                // 소멸 OFF → 유지
+                // 소멸 OFF → 유지 → cur만 자리로 이동
+                const place = result.length;
+                movesLocal.push({ fromLoc: fromLocCur, toLoc: place, text: cur.emoji, group: getGroup(cur.id), type: 'move' });
                 result.push(cur);
                 continue;
             }
         }
 
         // 마지막/단독 요소 push
+        const place = result.length;
+        movesLocal.push({ fromLoc: fromLocCur, toLoc: place, text: cur.emoji, group: getGroup(cur.id), type: 'move' });
         result.push(cur);
     }
 
     // 뒤쪽 null 채우기
     while (result.length < size) result.push(null);
 
-    return { line: result, mergedAt, destroyedPairs };
+    return { line: result, mergedAt, destroyedPairs, movesLocal };
 }
 
-/** 방향 이동 */
-function move(direction) {
-    const before = JSON.stringify(board.map(t => (t ? t.id : null)));
 
-    // 애니메이션 인덱스 수집
+function move(direction) {
+    if (isAnimating) return; // 애니 중 입력 잠금
+
+    const before = JSON.stringify(board.map(t => (t ? t.id : null)));
+    const tempBoard = Array(size * size).fill(null);
+
+    // 연출 인덱스(기존) + 절대 슬라이드 이동 계획(추가)
     const mergedGlobals = [];
     const destroyedGlobals = [];
+    const absMoves = []; // [{from:{r,c}, to:{r,c}, text, group, type}]
+
+    // 헬퍼: 한 줄에서 null이 아닌 원래 인덱스 목록 만들기
+    const nonNullPositions = (arr) =>
+        arr.map((v, idx) => (v ? idx : null)).filter(v => v !== null);
 
     if (direction === "left") {
         for (let r = 0; r < size; r++) {
-            const row = board.slice(r * size, r * size + size);
-            const { line: newRow, mergedAt, destroyedPairs } = slideLine(row);
-            for (let c = 0; c < size; c++) board[r * size + c] = newRow[c];
-            // 로컬 → 전역
-            mergedAt.forEach(loc => mergedGlobals.push(r * size + loc));
-            destroyedPairs.forEach(([a, b]) => {
-                destroyedGlobals.push(r * size + a, r * size + b);
+            const row = board.slice(r*size, r*size+size);
+            const pos = nonNullPositions(row);
+            const { line: newRow, mergedAt, destroyedPairs, movesLocal } = slideLine(row, pos);
+
+            // tempBoard에 반영
+            for (let c = 0; c < size; c++) tempBoard[r*size+c] = newRow[c];
+
+            // 전역 인덱스 수집(기존 펄스용)
+            mergedAt.forEach(loc => mergedGlobals.push(r*size + loc));
+            destroyedPairs.forEach(([a,b]) => {
+                destroyedGlobals.push(r*size + a, r*size + b);
+            });
+
+            // 절대 슬라이드용 전역 좌표 변환
+            movesLocal.forEach(m=>{
+                absMoves.push({
+                    from: { r, c: m.fromLoc },
+                    to:   { r, c: m.toLoc   },
+                    text: m.text, group: m.group, type: m.type
+                });
             });
         }
     }
 
     if (direction === "right") {
         for (let r = 0; r < size; r++) {
-            const row = board.slice(r * size, r * size + size).reverse();
-            const { line: revNew, mergedAt, destroyedPairs } = slideLine(row);
-            const newRow = revNew.reverse();
-            for (let c = 0; c < size; c++) board[r * size + c] = newRow[c];
-            mergedAt.forEach(loc => mergedGlobals.push(r * size + (size - 1 - loc)));
-            destroyedPairs.forEach(([a, b]) => {
-                destroyedGlobals.push(r * size + (size - 1 - a), r * size + (size - 1 - b));
+            const rowOrig = board.slice(r*size, r*size+size);
+            const row = rowOrig.slice().reverse(); // 좌로 처리
+            const posOrig = nonNullPositions(rowOrig);
+            const posRev  = posOrig.map(p => size - 1 - p).reverse();
+
+            const { line: newRowRev, mergedAt, destroyedPairs, movesLocal } = slideLine(row, posRev);
+            const newRow = newRowRev.reverse();
+
+            for (let c = 0; c < size; c++) tempBoard[r*size+c] = newRow[c];
+
+            mergedAt.forEach(loc => mergedGlobals.push(r*size + (size - 1 - loc)));
+            destroyedPairs.forEach(([a,b]) => {
+                destroyedGlobals.push(r*size + (size - 1 - a), r*size + (size - 1 - b));
+            });
+
+            movesLocal.forEach(m=>{
+                absMoves.push({
+                    from: { r, c: (size - 1 - m.fromLoc) },
+                    to:   { r, c: (size - 1 - m.toLoc)   },
+                    text: m.text, group: m.group, type: m.type
+                });
             });
         }
     }
 
     if (direction === "up") {
         for (let c = 0; c < size; c++) {
-            const col = [];
-            for (let r = 0; r < size; r++) col.push(board[r * size + c]);
-            const { line: newCol, mergedAt, destroyedPairs } = slideLine(col);
-            for (let r = 0; r < size; r++) board[r * size + c] = newCol[r];
-            mergedAt.forEach(loc => mergedGlobals.push(loc * size + c));
-            destroyedPairs.forEach(([a, b]) => {
-                destroyedGlobals.push(a * size + c, b * size + c);
+            const col = []; for (let r = 0; r < size; r++) col.push(board[r*size+c]);
+            const pos = nonNullPositions(col);
+
+            const { line: newCol, mergedAt, destroyedPairs, movesLocal } = slideLine(col, pos);
+            for (let r = 0; r < size; r++) tempBoard[r*size+c] = newCol[r];
+
+            mergedAt.forEach(loc => mergedGlobals.push(loc*size + c));
+            destroyedPairs.forEach(([a,b]) => {
+                destroyedGlobals.push(a*size + c, b*size + c);
+            });
+
+            movesLocal.forEach(m=>{
+                absMoves.push({
+                    from: { r: m.fromLoc, c },
+                    to:   { r: m.toLoc,   c },
+                    text: m.text, group: m.group, type: m.type
+                });
             });
         }
     }
 
     if (direction === "down") {
         for (let c = 0; c < size; c++) {
-            const col = [];
-            for (let r = 0; r < size; r++) col.push(board[r * size + c]);
-            const { line: revNew, mergedAt, destroyedPairs } = slideLine(col.reverse());
-            const newCol = revNew.reverse();
-            for (let r = 0; r < size; r++) board[r * size + c] = newCol[r];
-            mergedAt.forEach(loc => mergedGlobals.push((size - 1 - loc) * size + c));
-            destroyedPairs.forEach(([a, b]) => {
-                destroyedGlobals.push((size - 1 - a) * size + c, (size - 1 - b) * size + c);
+            const colOrig = []; for (let r = 0; r < size; r++) colOrig.push(board[r*size+c]);
+            const col = colOrig.slice().reverse();
+            const posOrig = nonNullPositions(colOrig);
+            const posRev  = posOrig.map(p => size - 1 - p).reverse();
+
+            const { line: newColRev, mergedAt, destroyedPairs, movesLocal } = slideLine(col, posRev);
+            const newCol = newColRev.reverse();
+
+            for (let r = 0; r < size; r++) tempBoard[r*size+c] = newCol[r];
+
+            mergedAt.forEach(loc => mergedGlobals.push((size - 1 - loc)*size + c));
+            destroyedPairs.forEach(([a,b]) => {
+                destroyedGlobals.push((size - 1 - a)*size + c, (size - 1 - b)*size + c);
+            });
+
+            movesLocal.forEach(m=>{
+                absMoves.push({
+                    from: { r: (size - 1 - m.fromLoc), c },
+                    to:   { r: (size - 1 - m.toLoc),   c },
+                    text: m.text, group: m.group, type: m.type
+                });
             });
         }
     }
 
-    // 이동 결과 비교
-    const after = JSON.stringify(board.map(t => (t ? t.id : null)));
+    const after = JSON.stringify(tempBoard.map(t => (t ? t.id : null)));
 
+    // 변화가 있으면: 절대 슬라이드 → 끝나고 확정/스폰/렌더
     if (before !== after) {
-        // 새 타일 추가 전 빈칸 스냅샷
+        // 스폰 전 빈칸 스냅샷
         const emptyBefore = [];
         for (let i = 0; i < board.length; i++) if (board[i] === null) emptyBefore.push(i);
 
-        // 새 타일 1개 스폰
-        addRandomTile();
+        playSlideAnimations(absMoves, ()=>{
+            // 애니 끝 → 실제 보드 확정
+            board = tempBoard.slice();
 
-        // 어떤 칸이 새로 채워졌는지 탐지
-        const spawned = [];
-        for (let i = 0; i < board.length; i++) {
-            const wasEmpty = emptyBefore.includes(i);
-            const nowFilled = board[i] !== null;
-            if (wasEmpty && nowFilled) spawned.push(i);
-        }
+            // 스폰
+            addRandomTile();
 
-        // 렌더 + 애니메이션
+            // 어떤 칸이 새로 채워졌는지 탐지
+            const spawned = [];
+            for (let i = 0; i < board.length; i++) {
+                const wasEmpty = emptyBefore.includes(i);
+                const nowFilled = board[i] !== null;
+                if (wasEmpty && nowFilled) spawned.push(i);
+            }
+
+            // 렌더 + 연출
+            render();
+            if (mergedGlobals.length)    pulseAt(mergedGlobals, "anim-merge");
+            if (destroyedGlobals.length) pulseAt(destroyedGlobals, "anim-destroy");
+            if (spawned.length)          pulseAt(spawned, "anim-spawn");
+        });
+    }
+    // 변화 없으면 미세 피드백만
+    else {
         render();
-        if (mergedGlobals.length)    pulseAt(mergedGlobals, "anim-merge");
-        if (destroyedGlobals.length) pulseAt(destroyedGlobals, "anim-destroy");
-        if (spawned.length)          pulseAt(spawned, "anim-spawn");
-    } else {
-        // 변화 없음 → 미세 피드백
-        render();                  // 안전하게 최신 반영
-        subtleFeedback(direction); // 부드러운 글로우 + 너지
+        subtleFeedback(direction);
     }
 }
 

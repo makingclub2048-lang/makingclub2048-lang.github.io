@@ -283,3 +283,29 @@ button:hover { background: #555; }
     touch-action: manipulation;
     user-select: none;
 }
+
+/* === Absolute slide FX layer === */
+.fx-layer{
+    position:absolute; inset:0;
+    pointer-events:none;
+    z-index:20;
+}
+
+/* 절대좌표 고스트 타일 (이동 연출 전용) */
+.tile-ghost{
+    position:absolute;
+    display:grid; place-items:center;
+    width: var(--cell); height: var(--cell);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.08);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+    transform: translate3d(0,0,0);
+    transition: transform 150ms ease;
+    will-change: transform;
+    font-size: clamp(18px, calc(var(--board-size) / 14), 32px);
+}
+/* (선택) 그룹별 색 맞춤 */
+.tile-ghost[data-group="fire"]  { background:#7a2e2e; }
+.tile-ghost[data-group="water"] { background:#204e7a; }
+.tile-ghost[data-group="air"]   { background:#2e6b5c; }
+.tile-ghost[data-group="earth"] { background:#5a4a2b; }
